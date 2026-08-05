@@ -53,7 +53,11 @@
   .ring .pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--hud);font-size:12px;font-weight:700}
   .gear{width:42px;height:42px;border-radius:12px;background:var(--panel);border:1px solid var(--line);font-size:18px;display:flex;align-items:center;justify-content:center}
   .gear:hover{background:var(--panel2)}
-
+.gear.connected{
+  color:var(--green);
+  border-color:var(--green);
+  background:rgba(93,214,160,.08);
+}
   /* ===== hero timer ===== */
   .hero{
     background:linear-gradient(180deg, #20243a 0%, var(--panel) 100%);
@@ -278,6 +282,7 @@
       </div>
       <div><div class="lbl">今日目标</div><div class="lbl hud" id="dayXp" style="color:var(--text)">0 XP</div></div>
     </div>
+    <button class="gear" id="cloudBtn" onclick="openAccount()" title="云端账号">☁️</button>
     <button class="gear" onclick="openSettings()" title="设置">⚙️</button>
   </div>
 
@@ -343,8 +348,28 @@
 
 <div class="toasts" id="toasts"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
 "use strict";
+
+/* ---------- Supabase ---------- */
+const SUPABASE_URL = "https://ebsgfnzdwgcdrpufyend.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_YRsHurnZpg4JYq4ZdUV8eg_01_89MX1";
+
+const supabaseClient = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth:{
+      persistSession:true,
+      autoRefreshToken:true,
+      detectSessionInUrl:true
+    }
+  }
+);
+
+let cloudUser = null;
 /* ---------- storage (works locally; degrades gracefully in sandbox) ---------- */
 const KEY="levelup_state_v1";
 let persistOK=true;
@@ -910,6 +935,179 @@ function endMelody(){
   beep(784, 300, 0.080);
   beep(1047,500, 0.090);
 }
+/* ---------- cloud account ---------- */
+
+function cloudRedirectUrl(){
+  // 自动取得当前 GitHub Pages 地址
+  return window.location.origin + window.location.pathname;
+}
+
+function updateCloudButton(){
+  const btn=$("cloudBtn");
+  if(!btn)return;
+
+  if(cloudUser){
+    btn.classList.add("connected");
+    btn.textContent="☁✓";
+    btn.title="已登录："+(cloudUser.email||"云端账号");
+  }else{
+    btn.classList.remove("connected");
+    btn.textContent="☁️";
+    btn.title="登录云端账号";
+  }
+}
+
+function openAccount(){
+  if(cloudUser){
+    showModal(
+      '<h3>云端账号</h3>'+
+      '<div class="field">'+
+        '<label>当前登录账号</label>'+
+        '<div style="padding:11px 12px;border-radius:10px;background:var(--bg2);border:1px solid var(--line);word-break:break-all">'+
+          esc(cloudUser.email||"已登录用户")+
+        '</div>'+
+      '</div>'+
+      '<div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px">'+
+        '账号连接成功。下一阶段将启用本地存档与云端存档同步。'+
+      '</div>'+
+      '<div class="mrow">'+
+        '<button class="mbtn" onclick="closeModal()">关闭</button>'+
+        '<button class="mbtn danger" onclick="signOutCloud()">退出登录</button>'+
+      '</div>'
+    );
+    return;
+  }
+
+  showModal(
+    '<h3>登录云端账号</h3>'+
+    '<div class="field">'+
+      '<label>邮箱</label>'+
+      '<input id="authEmail" type="email" autocomplete="email" placeholder="name@example.com">'+
+    '</div>'+
+    '<div class="field">'+
+      '<label>密码</label>'+
+      '<input id="authPassword" type="password" autocomplete="current-password" placeholder="输入密码">'+
+    '</div>'+
+    '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:10px">'+
+      '首次使用请点击“注册”。注册后需要前往邮箱确认账号。'+
+    '</div>'+
+    '<div class="mrow">'+
+      '<button class="mbtn" onclick="signUpCloud()">注册</button>'+
+      '<button class="mbtn primary" onclick="signInCloud()">登录</button>'+
+    '</div>'+
+    '<div class="mrow">'+
+      '<button class="mbtn" onclick="closeModal()">取消</button>'+
+    '</div>'
+  );
+}
+
+function readAuthFields(){
+  const emailEl=$("authEmail");
+  const passwordEl=$("authPassword");
+
+  const email=emailEl ? emailEl.value.trim() : "";
+  const password=passwordEl ? passwordEl.value : "";
+
+  if(!email){
+    toast("请输入邮箱地址");
+    if(emailEl)emailEl.focus();
+    return null;
+  }
+
+  if(!password){
+    toast("请输入密码");
+    if(passwordEl)passwordEl.focus();
+    return null;
+  }
+
+  return {email,password};
+}
+
+async function signUpCloud(){
+  const values=readAuthFields();
+  if(!values)return;
+
+  try{
+    toast("正在创建账号……");
+
+    const {data,error}=await supabaseClient.auth.signUp({
+      email:values.email,
+      password:values.password,
+      options:{
+        emailRedirectTo:cloudRedirectUrl()
+      }
+    });
+
+    if(error)throw error;
+
+    if(data.session){
+      toast("✅ 注册并登录成功","gold");
+      closeModal();
+    }else{
+      toast("📧 注册成功，请前往邮箱点击确认链接","gold");
+    }
+  }catch(error){
+    console.error("Supabase sign-up error:",error);
+    toast("注册失败："+(error.message||"未知错误"));
+  }
+}
+
+async function signInCloud(){
+  const values=readAuthFields();
+  if(!values)return;
+
+  try{
+    toast("正在登录……");
+
+    const {data,error}=await supabaseClient.auth.signInWithPassword({
+      email:values.email,
+      password:values.password
+    });
+
+    if(error)throw error;
+
+    if(data.user){
+      toast("✅ 云端账号登录成功","gold");
+      closeModal();
+    }
+  }catch(error){
+    console.error("Supabase sign-in error:",error);
+    toast("登录失败："+(error.message||"请检查邮箱和密码"));
+  }
+}
+
+async function signOutCloud(){
+  if(active){
+    toast("请先结束当前计时，再退出账号");
+    return;
+  }
+
+  try{
+    const {error}=await supabaseClient.auth.signOut();
+    if(error)throw error;
+
+    closeModal();
+    toast("已退出云端账号");
+  }catch(error){
+    console.error("Supabase sign-out error:",error);
+    toast("退出失败："+(error.message||"未知错误"));
+  }
+}
+
+function initCloudAuth(){
+  supabaseClient.auth.onAuthStateChange((event,session)=>{
+    cloudUser=session && session.user ? session.user : null;
+    updateCloudButton();
+
+    if(event==="SIGNED_IN"){
+      console.log("Supabase signed in:",cloudUser && cloudUser.email);
+    }
+
+    if(event==="SIGNED_OUT"){
+      console.log("Supabase signed out");
+    }
+  });
+}
 /* ---------- modals: skill / goal / settings ---------- */
 function showModal(html, extraClass=""){
   const box=$("modalBox");
@@ -1095,6 +1293,7 @@ function resetAll(){
 
 /* ---------- boot ---------- */
 load();
+initCloudAuth();
 refreshStreakOnLoad();
 if(!persistOK) $("persistNote").style.display="flex";
 render();

@@ -314,13 +314,13 @@ function dayOffset(n){const d=new Date();d.setDate(d.getDate()+n);return d;}
 function defaultState(){
   return {
     skills:[
-      {id:"s1",name:"编程",emoji:"💻",color:"#5b9dff",level:1,xp:0},
-      {id:"s2",name:"英语",emoji:"🗣️",color:"#5dd6a0",level:1,xp:0},
-      {id:"s3",name:"阅读",emoji:"📚",color:"#c084fc",level:1,xp:0},
+      {id:"s1",name:"示例技能：编程",emoji:"🖥️",color:"#5b9dff",level:1,xp:0},
+      //{id:"s2",name:"英语",emoji:"🗣️",color:"#5dd6a0",level:1,xp:0},
+      //{id:"s3",name:"阅读",emoji:"📚",color:"#c084fc",level:1,xp:0},
     ],
     goals:[
-      {id:"g1",skillId:"s1",text:"完成一节算法练习",bonus:150,done:false},
-      {id:"g2",skillId:"s2",text:"背完今日单词清单",bonus:100,done:false},
+      {id:"g1",skillId:"s1",text:"示例目标：完成一节算法练习",bonus:15,done:false},
+      //{id:"g2",skillId:"s2",text:"背完今日单词清单",bonus:10,done:false},
     ],
     dailyXp:{},
     dailyTimeXp:{},
@@ -333,7 +333,7 @@ function defaultState(){
     lastStudy:null,
     goalsDone:0,
     achievements:{},
-    settings:{xpPerMin:10,dailyGoal:300,checkEvery:15,sound:true},
+    settings:{xpPerMin:1,dailyGoal:100,checkEvery:30,sound:true},
   };
 }
 let S;

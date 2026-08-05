@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>当下的专注体验，是一切美好的本质 ٩(๑•̀ω•́๑)۶ · LevelUp</title>
+<style>
+  :root{
+    --bg:#13151f;
+    --bg2:#0e1018;
+    --panel:#1c1f2e;
+    --panel2:#232739;
+    --line:#2e3346;
+    --text:#ecebf5;
+    --muted:#9a9cb8;
+    --gold:#f5c451;
+    --gold-soft:#caa23e;
+    --flame:#ff7a3d;
+    --green:#5dd6a0;
+    --bad:#ff6b6b;
+    --hud: ui-monospace, "SFMono-Regular", "JetBrains Mono", "Consolas", monospace;
+    --sans: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:var(--sans);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #20243a 0%, transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, #1a2030 0%, transparent 55%),
+      var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:980px;margin:0 auto;padding:18px 16px 80px}
+  .hud{font-family:var(--hud);font-variant-numeric:tabular-nums}
+  button{font-family:inherit;cursor:pointer;border:none;color:inherit;background:none}
+  .note{background:#2a2238;border:1px solid #4a3a5e;color:#e7d4ff;padding:9px 12px;border-radius:10px;font-size:13px;margin-bottom:14px;display:flex;gap:10px;align-items:center}
+  .note button{margin-left:auto;color:#cbb6e6;font-size:18px;line-height:1}
+
+  /* ===== character header ===== */
+  .topbar{display:flex;align-items:center;gap:14px;margin-bottom:18px;flex-wrap:wrap}
+  .brand{display:flex;flex-direction:column;margin-right:auto}
+  .brand .rank{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);font-weight:700}
+  .brand .title{font-size:22px;font-weight:800;letter-spacing:-.01em}
+  .stat{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);padding:8px 12px;border-radius:12px}
+  .stat .big{font-family:var(--hud);font-size:20px;font-weight:700;line-height:1}
+  .stat .lbl{font-size:11px;color:var(--muted);letter-spacing:.04em}
+  .stat.streak .big{color:var(--flame)}
+  .ring{position:relative;width:46px;height:46px}
+  .ring svg{transform:rotate(-90deg)}
+  .ring .pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--hud);font-size:12px;font-weight:700}
+  .gear{width:42px;height:42px;border-radius:12px;background:var(--panel);border:1px solid var(--line);font-size:18px;display:flex;align-items:center;justify-content:center}
+  .gear:hover{background:var(--panel2)}
+
+  /* ===== hero timer ===== */
+  .hero{
+    background:linear-gradient(180deg, #20243a 0%, var(--panel) 100%);
+    border:1px solid var(--line);border-radius:20px;padding:22px;margin-bottom:20px;
+    position:relative;overflow:hidden;
+  }
+  .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(600px 240px at 50% -40%, rgba(245,196,81,.12), transparent 70%);pointer-events:none}
+  .hero h2{margin:0 0 4px;font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .skillpick{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 18px}
+  .chip{padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);font-size:14px;font-weight:600;display:flex;align-items:center;gap:7px;transition:transform .08s}
+  .chip:hover{transform:translateY(-1px)}
+  .chip.sel{box-shadow:0 0 0 2px var(--accent) inset;border-color:transparent}
+  .chip .dot{width:9px;height:9px;border-radius:50%}
+  .startbtn{width:100%;padding:16px;border-radius:14px;font-size:17px;font-weight:800;letter-spacing:.02em;
+    background:linear-gradient(180deg,#f8d06a,#e9b53e);color:#3a2c08;box-shadow:0 8px 24px -8px rgba(245,196,81,.5)}
+  .startbtn:hover{filter:brightness(1.05)}
+  .startbtn:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
+
+  /* active session */
+  .live{display:none}
+  .live.on{display:block}
+  .idle.off{display:none}
+  .nowskill{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;margin-bottom:6px}
+  .nowskill .dot{width:12px;height:12px;border-radius:50%}
+  .clock{font-family:var(--hud);font-size:56px;font-weight:700;letter-spacing:.02em;line-height:1;margin:6px 0 2px}
+  .live-sub{display:flex;gap:18px;align-items:baseline;flex-wrap:wrap;color:var(--muted);font-size:14px}
+  .live-sub b{color:var(--gold);font-family:var(--hud);font-size:18px}
+  .focuswrap{margin:16px 0 18px}
+  .focus-top{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px}
+  .focus-top .mult{font-family:var(--hud);font-weight:700;color:var(--gold)}
+  .focusbar{height:10px;border-radius:6px;background:var(--bg2);overflow:hidden}
+  .focusbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#f5c451,#ff9d4d);transition:width .4s}
+  .live-actions{display:flex;gap:10px}
+  .stopbtn{flex:1;padding:14px;border-radius:12px;font-weight:800;font-size:16px;background:#33384e;border:1px solid var(--line)}
+  .stopbtn.end{background:linear-gradient(180deg,#ff8a8a,#ef5c5c);color:#3a0d0d}
+  .stopbtn:hover{filter:brightness(1.06)}
+
+  /* ===== sections ===== */
+  .sec{margin-bottom:26px}
+  .sec-h{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+  .sec-h h3{margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em}
+  .sec-h .count{font-size:12px;color:var(--muted);font-family:var(--hud)}
+  .sec-h .add{margin-left:auto;font-size:13px;color:var(--gold);font-weight:700;padding:6px 12px;border:1px solid var(--line);border-radius:9px}
+  .sec-h .add:hover{background:var(--panel)}
+
+  /* skill cards */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+  .skill{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:15px;position:relative;overflow:hidden}
+  .skill::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent)}
+  .skill .row1{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .skill .emoji{font-size:22px}
+  .skill .nm{font-weight:700;font-size:15px}
+  .skill .lvl{margin-left:auto;font-family:var(--hud);font-weight:700;font-size:13px;background:var(--bg2);padding:4px 10px;border-radius:8px;color:var(--gold);border:1px solid #3a3320}
+  .xpbar{height:9px;border-radius:6px;background:var(--bg2);overflow:hidden;margin-bottom:6px}
+  .xpbar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold-soft),var(--gold));transition:width .5s;box-shadow:0 0 8px rgba(245,196,81,.4)}
+  .xpbar i.preview{background:linear-gradient(90deg,#7fd6ff,#5db8e6)}
+  .skill .xptext{font-size:11px;color:var(--muted);font-family:var(--hud);display:flex;justify-content:space-between}
+  .skill .edit{position:absolute;top:10px;right:10px;color:var(--muted);font-size:13px;opacity:0;transition:opacity .15s}
+  .skill:hover .edit{opacity:1}
+  .addskill{display:flex;align-items:center;justify-content:center;border:1.5px dashed var(--line);background:transparent;color:var(--muted);font-weight:700;min-height:104px;border-radius:16px}
+  .addskill:hover{color:var(--gold);border-color:var(--gold-soft)}
+
+  /* goals */
+  .goal{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:9px}
+  .goal .gdot{width:10px;height:10px;border-radius:50%;flex:none}
+  .goal .gtxt{flex:1}
+  .goal .gtxt .t{font-weight:600;font-size:14px}
+  .goal .gtxt .s{font-size:12px;color:var(--muted)}
+  .goal .bonus{font-family:var(--hud);font-weight:700;color:var(--gold);font-size:13px;white-space:nowrap}
+  .goal .claim{padding:8px 14px;border-radius:9px;font-weight:700;font-size:13px;background:linear-gradient(180deg,#6fe3ad,#46c98c);color:#06351f}
+  .goal .claim:hover{filter:brightness(1.05)}
+  .goal .del{color:var(--muted);font-size:15px;padding:4px}
+  .goal.done{opacity:.5}
+  .goal.done .t{text-decoration:line-through}
+  .empty{color:var(--muted);font-size:13px;padding:6px 2px}
+
+  /* achievements */
+  .badges{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+  .badge{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;text-align:center;opacity:.4;filter:grayscale(.7);transition:.2s}
+  .badge.un{opacity:1;filter:none;border-color:var(--gold-soft);box-shadow:0 0 0 1px rgba(245,196,81,.25), 0 6px 18px -10px rgba(245,196,81,.4)}
+  .badge .ic{font-size:26px}
+  .badge .bn{font-weight:700;font-size:13px;margin-top:4px}
+  .badge .bd{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.3}
+  .badge .dt{font-size:11px;color:var(--gold);margin-top:4px;font-family:var(--hud)}
+  .badge.warn.un{border-color:#a34747;box-shadow:0 0 0 1px rgba(255,107,107,.3), 0 6px 18px -10px rgba(255,107,107,.4)}
+  .badge.warn.un .dt{color:var(--bad)}
+
+  /* hue slider for custom skill color */
+  .hueslider{width:100%;-webkit-appearance:none;appearance:none;height:14px;border-radius:7px;outline:none;
+    background:linear-gradient(90deg,#f55,#ff5,#5f5,#5ff,#55f,#f5f,#f55)}
+  .hueslider::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;
+    background:var(--text);border:3px solid var(--bg2);cursor:pointer}
+  .hueprev{display:inline-block;width:18px;height:18px;border-radius:50%;vertical-align:middle;margin-left:8px;border:2px solid var(--line)}
+
+  /* Sunday marker in charts */
+  .bar.sun .d{color:#ff8a5b;font-weight:700}
+  .bar.sun .col{background:linear-gradient(180deg,#ff9d6b,#d97a45)}
+  .bar.sun.today .d{color:var(--gold)}
+
+  /* chart */
+  .chart{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 16px 10px;display:flex;align-items:flex-end;gap:10px;height:160px}
+  .bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+  .bar .col{width:70%;max-width:34px;background:linear-gradient(180deg,var(--gold),var(--gold-soft));border-radius:6px 6px 2px 2px;min-height:3px;transition:height .5s}
+  .bar.today .col{box-shadow:0 0 12px rgba(245,196,81,.5)}
+  .bar .v{font-size:10px;color:var(--muted);font-family:var(--hud)}
+  .bar .d{font-size:11px;color:var(--muted)}
+  .bar.today .d{color:var(--gold);font-weight:700}
+
+  /* modal */
+  .scrim{position:fixed;inset:0;background:rgba(8,9,14,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:50;padding:18px}
+  .scrim.on{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:22px;width:100%;max-width:400px}
+  .modal h3{margin:0 0 16px;font-size:18px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;letter-spacing:.03em}
+  .field input,.field select{width:100%;padding:11px 12px;border-radius:10px;background:var(--bg2);border:1px solid var(--line);color:var(--text);font-size:15px;font-family:inherit}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--gold-soft)}
+  .swatches{display:flex;gap:8px;flex-wrap:wrap}
+  .sw{width:30px;height:30px;border-radius:50%;border:2px solid transparent}
+  .sw.sel{border-color:var(--text);transform:scale(1.12)}
+  .emojipick{display:flex;gap:6px;flex-wrap:wrap}
+  .ep{width:38px;height:38px;border-radius:10px;background:var(--bg2);border:1px solid var(--line);font-size:20px}
+  .ep.sel{border-color:var(--gold);background:#2a2614}
+  .mrow{display:flex;gap:10px;margin-top:8px}
+  .mbtn{flex:1;padding:12px;border-radius:11px;font-weight:700;font-size:15px;background:var(--panel2);border:1px solid var(--line)}
+  .mbtn.primary{background:linear-gradient(180deg,#f8d06a,#e9b53e);color:#3a2c08;border:none}
+  .mbtn.danger{color:var(--bad)}
+  .mbtn:hover{filter:brightness(1.06)}
+
+  /* afk check */
+  .afk{text-align:center}
+  .afk .ico{font-size:40px}
+  .afk h3{margin:10px 0 6px;font-size:20px}
+  .afk p{color:var(--muted);margin:0 0 18px;font-size:14px}
+  .afk .cd{font-family:var(--hud);font-size:13px;color:var(--muted);margin-top:12px}
+  .afkbtn{width:100%;padding:15px;border-radius:13px;font-weight:800;font-size:17px;background:linear-gradient(180deg,#6fe3ad,#46c98c);color:#06351f}
+
+  /* toast + level up */
+  .toasts{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:60;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+  .toast{background:#23283c;border:1px solid var(--line);color:var(--text);padding:11px 18px;border-radius:12px;font-size:14px;font-weight:600;box-shadow:0 10px 30px -10px #000;display:flex;gap:9px;align-items:center;animation:pop .3s}
+  .toast.gold{border-color:var(--gold);box-shadow:0 0 0 1px rgba(245,196,81,.3),0 10px 30px -8px rgba(245,196,81,.45)}
+  @keyframes pop{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
+  .confetti{position:fixed;inset:0;pointer-events:none;z-index:55;overflow:hidden}
+  .cf{position:absolute;width:9px;height:14px;border-radius:2px;will-change:transform}
+  @keyframes fall{to{transform:translateY(110vh) rotate(620deg);opacity:.2}}
+
+  @media (max-width:560px){
+    .clock{font-size:46px}
+    .brand .title{font-size:18px}
+    .stat{padding:7px 10px}
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.001ms !important;transition-duration:.001ms !important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="persistNote" class="note" style="display:none">
+    <span>⚠️ 当前预览环境不会保存进度。把这个文件下载到电脑上打开，学习记录就会自动保存在本地。</span>
+    <button onclick="this.parentElement.style.display='none'">×</button>
+  </div>
+
+  <!-- character header -->
+  <div class="topbar">
+    <div class="brand">
+      <span class="rank" id="rank">新手学徒</span>
+      <span class="title">今天你升级了吗^ω^</span>
+    </div>
+    <div class="stat"><div><div class="big hud" id="totalLvl">0</div><div class="lbl">总等级</div></div></div>
+    <div class="stat streak"><span style="font-size:18px">🔥</span><div><div class="big" id="streak">0</div><div class="lbl">连续天数</div></div></div>
+    <div class="stat">
+      <div class="ring">
+        <svg width="46" height="46"><circle cx="23" cy="23" r="19" stroke="#2e3346" stroke-width="5" fill="none"/><circle id="dayRing" cx="23" cy="23" r="19" stroke="#f5c451" stroke-width="5" fill="none" stroke-linecap="round" stroke-dasharray="119" stroke-dashoffset="119"/></svg>
+        <div class="pct hud" id="dayPct">0%</div>
+      </div>
+      <div><div class="lbl">今日目标</div><div class="lbl hud" id="dayXp" style="color:var(--text)">0 XP</div></div>
+    </div>
+    <button class="gear" onclick="openSettings()" title="设置">⚙️</button>
+  </div>
+
+  <!-- hero timer -->
+  <div class="hero">
+    <div class="idle" id="idlePanel">
+      <h2>开始一次学习 · 计时获得经验</h2>
+      <div class="skillpick" id="skillPick"></div>
+      <button class="startbtn" id="startBtn" onclick="startSession()">▶ 开始学习</button>
+    </div>
+    <div class="live" id="livePanel">
+      <div class="nowskill"><span class="dot" id="liveDot"></span><span id="liveName"></span></div>
+      <div class="clock hud" id="clock">00:00:00</div>
+      <div class="live-sub">
+        <span>本次经验 <b id="sessXp">+0</b></span>
+        <span>累计 <b id="sessMin" style="color:var(--text)">0</b> 分钟</span>
+      </div>
+      <div class="focuswrap">
+        <div class="focus-top"><span>专注连击</span><span class="mult" id="focusMult">×1.0</span></div>
+        <div class="focusbar"><i id="focusFill"></i></div>
+      </div>
+      <div class="live-actions">
+        <button class="stopbtn end" onclick="stopSession(false)">■ 结束并保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- skills -->
+  <div class="sec">
+    <div class="sec-h"><h3>技能树</h3><span class="count" id="skillCount"></span><button class="add" onclick="openSkillEditor()">+ 新技能</button></div>
+    <div class="grid" id="skillGrid"></div>
+  </div>
+
+  <!-- goals -->
+  <div class="sec">
+    <div class="sec-h"><h3>目标 · 完成得额外经验</h3><button class="add" onclick="openGoalEditor()">+ 新目标</button></div>
+    <div id="goalList"></div>
+  </div>
+
+  <!-- achievements -->
+  <div class="sec">
+    <div class="sec-h"><h3>成就</h3><span class="count" id="achCount"></span></div>
+    <div class="badges" id="badgeGrid"></div>
+  </div>
+
+  <!-- chart -->
+  <div class="sec">
+    <div class="sec-h"><h3>近 7 天学习时长（分钟）</h3><button class="add" onclick="openHistory()">📊 查看 30 天</button></div>
+    <div class="chart" id="chart"></div>
+  </div>
+</div>
+
+<!-- generic modal host -->
+<div class="scrim" id="scrim"><div class="modal" id="modalBox"></div></div>
+<!-- afk modal -->
+<div class="scrim" id="afkScrim"><div class="modal afk">
+  <div class="ico">👀</div>
+  <h3>还在专注学习吗？</h3>
+  <p>确认一下你还在状态，经验才会继续累计。</p>
+  <button class="afkbtn" onclick="confirmAfk()">我还在！继续</button>
+  <div class="cd">未确认将在 <span id="afkCd" class="hud">60</span> 秒后自动暂停</div>
+</div></div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+"use strict";
+/* ---------- storage (works locally; degrades gracefully in sandbox) ---------- */
+const KEY="levelup_state_v1";
+let persistOK=true;
+try{ localStorage.setItem("__t","1"); localStorage.removeItem("__t"); }catch(e){ persistOK=false; }
+
+const PALETTE=["#5b9dff","#5dd6a0","#c084fc","#ff8a5b","#ff6b9d","#ffd24d","#4dd0e1","#a0e85b",
+               "#7986ff","#26c6a2","#e57ac9","#e8b04a","#66b8ff","#93d94e","#ff7f7f","#b39ddb"];
+const EMOJIS=["📚","💻","🎸","🗣️","🏋️","🎨","🧮","🔬","✍️","🎹","🌐","♟️"];
+
+function todayStr(d=new Date()){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function dayOffset(n){const d=new Date();d.setDate(d.getDate()+n);return d;}
+
+function defaultState(){
+  return {
+    skills:[
+      {id:"s1",name:"编程",emoji:"💻",color:"#5b9dff",level:1,xp:0},
+      {id:"s2",name:"英语",emoji:"🗣️",color:"#5dd6a0",level:1,xp:0},
+      {id:"s3",name:"阅读",emoji:"📚",color:"#c084fc",level:1,xp:0},
+    ],
+    goals:[
+      {id:"g1",skillId:"s1",text:"完成一节算法练习",bonus:150,done:false},
+      {id:"g2",skillId:"s2",text:"背完今日单词清单",bonus:100,done:false},
+    ],
+    dailyXp:{},
+    dailyTimeXp:{},
+    dailyGoalXp:{},
+    goalDoneDates:{},
+    lastGoalAdd:null,
+    fiscalPending:0,
+    badgeLit:{},
+    streak:0,
+    lastStudy:null,
+    goalsDone:0,
+    achievements:{},
+    settings:{xpPerMin:10,dailyGoal:300,checkEvery:15,sound:true},
+  };
+}
+let S;
+function load(){
+  try{const raw=localStorage.getItem(KEY); S = raw?JSON.parse(raw):defaultState();}
+  catch(e){ S=defaultState(); }
+  // backfill
+  const d=defaultState();
+  for(const k in d){ if(S[k]===undefined) S[k]=d[k]; }
+  for(const k in d.settings){ if(S.settings[k]===undefined) S.settings[k]=d.settings[k]; }
+  // 旧档迁移：账本功能上线前的每日经验，按"计时学习"补记入账
+  for(const k in S.dailyXp){
+    if(S.dailyTimeXp[k]===undefined && S.dailyGoalXp[k]===undefined) S.dailyTimeXp[k]=S.dailyXp[k];
+  }
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+
+/* ---------- leveling math ---------- */
+function xpToNext(level){ return level>=10 ? 300 : 100+20*level; }            // xp needed to go from `level` -> level+1
+function addXpToSkill(skill, amount){
+  amount=Math.round(amount);
+  skill.xp += amount;
+  let leveled=false;
+  while(skill.xp >= xpToNext(skill.level)){
+    skill.xp -= xpToNext(skill.level);
+    skill.level++;
+    leveled=true;
+  }
+  return leveled;
+}
+function totalLevel(){ return S.skills.reduce((a,s)=>a+s.level,0); }
+const RANKS=[[0,"新手学徒"],[10,"小试牛刀"],[20,"初露锋芒"],[40,"小有成就"],[70,"博学之士"],[120,"智慧贤者"],[500,"活着的传奇"]];
+function rankFor(tl){let r="新手学徒";for(const[n,t]of RANKS){if(tl>=n)r=t;}return r;}
+
+/* ---------- daily / streak ---------- */
+function recordDailyXp(amount, source){
+  const t=todayStr();
+  S.dailyXp[t]=(S.dailyXp[t]||0)+Math.round(amount);
+  if(source==="goal") S.dailyGoalXp[t]=(S.dailyGoalXp[t]||0)+Math.round(amount);
+  else S.dailyTimeXp[t]=(S.dailyTimeXp[t]||0)+Math.round(amount);
+  // streak
+  if(S.lastStudy!==t){
+    const y=todayStr(dayOffset(-1));
+    if(S.lastStudy===y) S.streak++;
+    else S.streak=1;
+    S.lastStudy=t;
+  }
+}
+function refreshStreakOnLoad(){
+  const t=todayStr(), y=todayStr(dayOffset(-1));
+  if(S.lastStudy && S.lastStudy!==t && S.lastStudy!==y) S.streak=0; // broken
+}
+
+/* ---------- badges（动态点亮/熄灭） ---------- */
+function sum7(map){ // 近7日（含今天）合计
+  let s=0; for(let i=0;i<7;i++) s+=map[todayStr(dayOffset(-i))]||0;
+  return s;
+}
+function runDays(map,len,minVal){ // 是否存在“连续len天、每天>minVal”的记录，窗口以今天或昨天收尾
+  for(const end of [0,-1]){
+    let ok=true;
+    for(let i=0;i<len;i++){ if((map[todayStr(dayOffset(end-i))]||0)<=minVal){ok=false;break;} }
+    if(ok)return true;
+  }
+  return false;
+}
+function bestDayThisMonth(){ // 本自然月计时学习最长的一天 -> {date, mins} 或 null
+  const now=new Date(), pre=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-";
+  let best=null;
+  for(const k in S.dailyTimeXp){
+    if(k.startsWith(pre)){
+      const mins=Math.round(S.dailyTimeXp[k]/S.settings.xpPerMin);
+      if(!best||mins>best.mins) best={date:k,mins};
+    }
+  }
+  return best;
+}
+const GOAL_GRACE=30; // 每日前30 XP任务经验豁免，不计入防作弊额度
+function effGoal7(){ // 近7日“计入额度”的任务经验（每天扣除豁免部分）
+  let s=0;
+  for(let i=0;i<7;i++){ const v=S.dailyGoalXp[todayStr(dayOffset(-i))]||0; s+=Math.max(0,v-GOAL_GRACE); }
+  return s;
+}
+function fiscalAllowance(){ // 剩余奖励额度 = 7日计时经验的50% - 已计入的任务经验
+  return 0.3333*sum7(S.dailyTimeXp) - effGoal7();
+}
+const BADGES=[
+  {id:"persist3",ic:"🔥",nm:"坚持的一小步",bd:"连续 3 天每天获得 60+ XP",
+    test:()=>runDays(S.dailyXp,3,60)},
+  {id:"persist7",ic:"💪",nm:"毅力过人",bd:"连续 7 天每天获得 60+ XP",
+    test:()=>runDays(S.dailyXp,7,60)},
+  {id:"highlight",ic:"🌟",nm:"高光时刻",bd:"本月单日计时学习超 240 分钟",
+    test:()=>{const b=bestDayThisMonth();return !!(b&&b.mins>240);},
+    detail:()=>{const b=bestDayThisMonth();return b?(b.date.slice(5).replace("-","/")+" · "+b.mins+" 分钟"):"";}},
+  {id:"compass",ic:"🧭",nm:"心中的罗盘",bd:"今天为自己添加过目标",
+    test:()=>S.lastGoalAdd===todayStr()},
+  {id:"bounty",ic:"🏹",nm:"赏金猎人",bd:"连续 3 天每天完成至少 1 个目标",
+    test:()=>runDays(S.goalDoneDates,3,0)},
+  {id:"fiscal",ic:"⚠️",nm:"财政危机",bd:"有奖励被拦下：任务经验触到计时经验50%上限（每日前"+GOAL_GRACE+" XP豁免）",warn:true,alwaysDetail:true,
+    test:()=>(S.fiscalPending||0)>0 && S.fiscalPending>fiscalAllowance(),
+    detail:()=>{
+      const t7=sum7(S.dailyTimeXp), g7=sum7(S.dailyGoalXp);
+      return "7日学习 "+t7+" · 7日任务 "+g7+"（计入 "+effGoal7()+"）· 剩余额度 "+Math.max(0,Math.round(fiscalAllowance()));
+    }},
+];
+let flags={early:false,night:false};
+let sessionsDone=0, maxSession=0;
+function checkAchievements(){ // 名字保留以兼容旧调用点；现在做的是点亮/熄灭检测
+  for(const b of BADGES){
+    const lit=b.test(), was=!!S.badgeLit[b.id];
+    if(lit&&!was){
+      if(b.warn){ toast(b.ic+" 警告：「"+b.nm+"」"); beep(392,0,0.05); }
+      else{ toast(b.ic+" 徽章点亮：「"+b.nm+"」","gold"); beep(880); }
+    }
+    S.badgeLit[b.id]=lit;
+  }
+}
+
+/* ---------- rendering ---------- */
+const $=id=>document.getElementById(id);
+function render(){
+if(!selSkill && S.skills.length) selSkill=S.skills[0].id;
+  // header
+  const tl=totalLevel();
+  $("totalLvl").textContent=tl;
+  $("rank").textContent=rankFor(tl);
+  $("streak").textContent=S.streak;
+  const dx=S.dailyXp[todayStr()]||0;
+  const goal=S.settings.dailyGoal;
+  const pct=Math.min(1,goal>0?dx/goal:0);
+  $("dayXp").textContent=dx+" XP";
+  $("dayPct").textContent=Math.round(pct*100)+"%";
+  $("dayRing").setAttribute("stroke-dashoffset", (119*(1-pct)).toFixed(1));
+
+  // skill chips (picker)
+  const pick=$("skillPick"); pick.innerHTML="";
+  S.skills.forEach(s=>{
+    const c=document.createElement("button");
+    c.className="chip"+(s.id===selSkill?" sel":"");
+    c.style.setProperty("--accent",s.color);
+    c.innerHTML='<span class="dot" style="background:'+s.color+'"></span>'+s.emoji+" "+esc(s.name);
+    c.onclick=()=>{selSkill=s.id;render();};
+    pick.appendChild(c);
+  });
+  $("startBtn").disabled=!selSkill || S.skills.length===0;
+  if(!selSkill && S.skills.length) {selSkill=S.skills[0].id;}
+
+  // skill grid
+  const g=$("skillGrid"); g.innerHTML="";
+  S.skills.forEach(s=>{
+    const need=xpToNext(s.level);
+    let pv=0;
+    if(active && active.skillId===s.id){ pv=sessXp; }
+    const cur=Math.min(s.xp+pv,need);
+    const basePct=Math.min(100,s.xp/need*100);
+    const prevPct=Math.min(100,cur/need*100);
+    const el=document.createElement("div");
+    el.className="skill"; el.style.setProperty("--accent",s.color);
+    el.innerHTML=
+      '<button class="edit" title="编辑">✎</button>'+
+      '<div class="row1"><span class="emoji">'+s.emoji+'</span><span class="nm">'+esc(s.name)+'</span><span class="lvl">Lv '+s.level+'</span></div>'+
+      '<div class="xpbar"><i class="preview" style="width:'+prevPct+'%"></i><i style="width:'+basePct+'%;margin-top:-9px"></i></div>'+
+      '<div class="xptext"><span>'+Math.round(s.xp)+(pv?' (+'+Math.round(pv)+')':'')+'</span><span>/ '+need+' XP</span></div>';
+    el.querySelector(".edit").onclick=()=>openSkillEditor(s.id);
+    g.appendChild(el);
+  });
+  const addc=document.createElement("button");
+  addc.className="addskill"; addc.textContent="+ 添加技能"; addc.onclick=()=>openSkillEditor();
+  g.appendChild(addc);
+  $("skillCount").textContent=S.skills.length+" 项技能 · 总 "+totalLevel()+" 级";
+
+  // goals
+  const gl=$("goalList"); gl.innerHTML="";
+  if(S.goals.length===0) gl.innerHTML='<div class="empty">还没有目标。设几个里程碑，完成时领额外经验。</div>';
+  S.goals.forEach(go=>{
+    const sk=S.skills.find(x=>x.id===go.skillId);
+    const el=document.createElement("div");
+    el.className="goal"+(go.done?" done":"");
+    el.innerHTML=
+      '<span class="gdot" style="background:'+(sk?sk.color:"#888")+'"></span>'+
+      '<div class="gtxt"><div class="t">'+esc(go.text)+'</div><div class="s">'+(sk?sk.emoji+" "+esc(sk.name):"未分配")+'</div></div>'+
+      '<span class="bonus">+'+go.bonus+' XP</span>'+
+      (go.done?'<button class="del" title="删除">🗑</button>':'<button class="claim">完成</button><button class="del" title="删除">🗑</button>');
+    if(!go.done) el.querySelector(".claim").onclick=()=>claimGoal(go.id);
+    el.querySelector(".del").onclick=()=>{S.goals=S.goals.filter(x=>x.id!==go.id);save();render();};
+    gl.appendChild(el);
+  });
+
+  // badges
+  const bg=$("badgeGrid"); bg.innerHTML="";
+  let un=0;
+  BADGES.forEach(b=>{
+    const lit=b.test(); if(lit&&!b.warn)un++;
+    const dt=((lit||b.alwaysDetail)&&b.detail)?b.detail():"";
+    const el=document.createElement("div");
+    el.className="badge"+(lit?" un":"")+(b.warn?" warn":"");
+    el.innerHTML='<div class="ic">'+(lit?b.ic:"🔒")+'</div><div class="bn">'+b.nm+'</div><div class="bd">'+b.bd+'</div>'+(dt?'<div class="dt">'+dt+'</div>':'');
+    bg.appendChild(el);
+  });
+  $("achCount").textContent="点亮 "+un+" / "+BADGES.filter(b=>!b.warn).length;
+
+  // chart
+  const ch=$("chart"); ch.innerHTML="";
+  let mx=1;
+  const days=[];
+  for(let i=6;i>=0;i--){const d=dayOffset(-i);const key=todayStr(d);const mins=Math.round((S.dailyXp[key]||0)/S.settings.xpPerMin);days.push({d,mins,key});mx=Math.max(mx,mins);}
+  const wk=["日","一","二","三","四","五","六"];
+  days.forEach(o=>{
+    const isToday=o.key===todayStr();
+    const isSun=o.d.getDay()===0;
+    const h=Math.max(3,(o.mins/mx)*100);
+    const b=document.createElement("div");
+    b.className="bar"+(isToday?" today":"")+(isSun?" sun":"");
+    b.innerHTML='<div class="v">'+(o.mins||"")+'</div><div class="col" style="height:'+h+'%"></div><div class="d">'+wk[o.d.getDay()]+'</div>';
+    ch.appendChild(b);
+  });
+}
+function esc(s){return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+/* ---------- goals ---------- */
+function claimGoal(id){
+  const go=S.goals.find(x=>x.id===id); if(!go||go.done)return;
+  go.done=true; S.goalsDone++;
+  const t=todayStr();
+  S.goalDoneDates[t]=(S.goalDoneDates[t]||0)+1;
+  // 防作弊：每日前GOAL_GRACE XP豁免；超出部分计入额度，额度=近7日计时经验的50%
+  const goalToday=S.dailyGoalXp[t]||0;
+  const counted=Math.max(0,(goalToday+go.bonus)-Math.max(GOAL_GRACE,goalToday)); // 本次奖励中需计入额度的部分
+  const allowance=fiscalAllowance();
+  const sk=S.skills.find(x=>x.id===go.skillId);
+  if(counted>allowance){
+    S.fiscalPending=Math.max(S.fiscalPending||0,Math.round(counted));
+    toast("⚠️ 财政危机：本次需额度 "+Math.round(counted)+"，剩余 "+Math.max(0,Math.round(allowance))+"。先计时学习攒经验吧");
+    beep(392,0,0.05);
+  }else if(sk){
+    S.fiscalPending=0;
+    const lvl=addXpToSkill(sk,go.bonus); recordDailyXp(go.bonus,"goal"); if(lvl) levelBurst(sk);
+    toast("🎁 目标达成 +"+go.bonus+" XP","gold"); beep(660);
+  }
+  checkAchievements(); save(); render();
+}
+
+/* ---------- session / timer ---------- */
+let active=null;        // {skillId, startEpoch, lastTick, continuousSec}
+let sessXp=0, selSkill=null, tickTimer=null;
+let afkTimer=null, afkCdTimer=null, afkCheckpoint=null;
+
+
+function focusMult(continuousSec){
+  // 专注力梯形曲线：热身 → 巅峰 → 下降。太短或太久，加成都低。
+  const t = continuousSec/60;       // 当前连续专注分钟数
+  const WARMUP      = 15;           // 热身：前 10 分钟逐渐进入状态
+  const PEAK        = 1.25;          // 巅峰加成倍率（原来是 2.0）
+  const PEAK_END    = 70;           // 巅峰平台保持到第 45 分钟
+  const DECLINE_END = 120;           // 第 90 分钟回落到无加成（与休息提醒一致）
+  if(t <= WARMUP)      return 1.0 + (PEAK-1.0)*(t/WARMUP);
+  if(t <= PEAK_END)    return PEAK;
+  if(t <= DECLINE_END) return PEAK - (PEAK-1.0)*((t-PEAK_END)/(DECLINE_END-PEAK_END));
+  return 1.0;                       // 超过 90 分钟：疲劳期，只给基础经验
+}
+
+
+/* 心跳走 Web Worker：后台标签页里 Worker 的定时器不会被激进降频，弹窗/提示音更准点 */
+let ticker=null;
+function startTicker(){
+  stopTicker();
+  try{
+    const src='setInterval(function(){postMessage(1)},1000)';
+    const w=new Worker(URL.createObjectURL(new Blob([src],{type:"application/javascript"})));
+    w.onmessage=()=>tick();
+    ticker={stop:()=>w.terminate()};
+  }catch(e){ // 环境不支持时退回普通定时器
+    const id=setInterval(tick,1000);
+    ticker={stop:()=>clearInterval(id)};
+  }
+}
+function stopTicker(){ if(ticker){ticker.stop();ticker=null;} }
+
+/* 系统通知（Windows 右下角） */
+let sysNotif=null;
+function askNotifPermission(){
+  try{ if("Notification" in window && Notification.permission==="default") Notification.requestPermission(); }catch(e){}
+}
+function notify(title,body){
+  try{
+    if(!("Notification" in window) || Notification.permission!=="granted") return;
+    if(sysNotif) sysNotif.close();
+    sysNotif=new Notification(title,{body:body,tag:"levelup-afk",requireInteraction:true});
+    sysNotif.onclick=()=>{ try{window.focus();}catch(e){} sysNotif.close(); };
+  }catch(e){}
+}
+function closeNotify(){ if(sysNotif){ try{sysNotif.close();}catch(e){} sysNotif=null; } }
+
+function startSession(){
+  if(!selSkill||active)return;
+  active={skillId:selSkill,startEpoch:Date.now(),lastTick:Date.now(),continuousSec:0};
+  sessXp=0;
+  const sk=S.skills.find(s=>s.id===selSkill);
+  $("liveName").textContent=sk.emoji+" "+sk.name;
+  $("liveDot").style.background=sk.color;
+  $("idlePanel").classList.add("off");
+  $("livePanel").classList.add("on");
+  const h=new Date().getHours();
+  if(h<7)flags.early=true; if(h>=23)flags.night=true;
+  scheduleAfk();
+  askNotifPermission();
+  beep(520);
+  startTicker();
+  tick();
+}
+function tick(){
+  if(!active)return;
+  const now=Date.now();
+  let dt=(now-active.lastTick)/1000; active.lastTick=now;
+  if(dt<0)dt=0;
+  // 按 1 秒步长沿专注曲线积分补记经验；同时在越过“该确认”的时刻拍下快照
+  const rate=S.settings.xpPerMin/60;
+  let cursor=now-dt*1000;
+  let remain=dt;
+  while(remain>0){
+    const step=Math.min(1,remain);
+    if(active.afkDueAt && !active.afkSnap && cursor>=active.afkDueAt){
+      active.afkSnap={xp:sessXp, elapsed:Math.round((active.afkDueAt-active.startEpoch)/1000)};
+    }
+    active.continuousSec+=step;
+    sessXp += rate*step*focusMult(active.continuousSec);
+    remain-=step; cursor+=step*1000;
+  }
+  if(active.afkDueAt && !active.afkSnap && now>=active.afkDueAt){
+    active.afkSnap={xp:sessXp, elapsed:Math.round((active.afkDueAt-active.startEpoch)/1000)};
+  }
+  if(!active.restReminded && active.continuousSec>=90*60){ active.restReminded=true; restReminder(); }
+  // 到点未确认的处理：超过死线 60 秒 → 自动结算；到点了 → 弹窗
+  if(active.afkDueAt && now>=active.afkDueAt+60000){ afkTimeout(); return; }
+  if(active.afkDueAt && now>=active.afkDueAt && !afkOpen){ triggerAfk(); }
+  // display
+  const elapsed=Math.floor((now-active.startEpoch)/1000);
+  $("clock").textContent=fmt(elapsed);
+  $("sessXp").textContent="+"+Math.round(sessXp);
+  $("sessMin").textContent=Math.floor(elapsed/60);
+  const tmin=active.continuousSec/60;
+  const m=focusMult(active.continuousSec);
+  let phase="热身中";
+  if(tmin>90) phase="该休息一下了"; else if(tmin>70) phase="很不错"; else if(tmin>=10) phase="巅峰专注";
+  $("focusMult").textContent=phase+" ×"+m.toFixed(2);
+  $("focusFill").style.width=Math.round((m-1)/0.25*100)+"%"; // 0.25 = PEAK-1，与 focusMult 的 PEAK 保持一致
+  // live preview on skill bar
+  render();
+}
+function fmt(s){const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return [h,m,x].map(v=>String(v).padStart(2,"0")).join(":");}
+
+function endSessionCommit(){
+  const sk=S.skills.find(s=>s.id===active.skillId);
+  const gained=Math.round(sessXp);
+  const mins=Math.floor((Date.now()-active.startEpoch)/1000/60);
+  maxSession=Math.max(maxSession, mins);
+  let leveled=false;
+  if(gained>0 && sk){ leveled=addXpToSkill(sk,gained); recordDailyXp(gained,"time"); sessionsDone++; }
+  clearTimers(); active=null; sessXp=0;
+  $("livePanel").classList.remove("on");
+  $("idlePanel").classList.remove("off");
+  if(!leveled)endMelody();
+  if(gained>0){ toast("✅ +"+gained+" XP · 学习 "+mins+" 分钟"); if(leveled) levelBurst(sk); }
+  checkAchievements(); save(); render();
+}
+function stopSession(){ if(!active)return; endSessionCommit(); }
+
+function clearTimers(){
+  stopTicker();
+  clearInterval(tickTimer); tickTimer=null;
+  clearTimeout(afkTimer); afkTimer=null;
+  clearInterval(afkCdTimer); afkCdTimer=null;
+}
+
+/* ---------- AFK presence check（时间戳法：不依赖后台定时器准时） ---------- */
+let afkOpen=false;
+function scheduleAfk(){
+  if(!active)return;
+  active.afkDueAt = Date.now() + Math.max(1,S.settings.checkEvery)*60*1000;
+  active.afkSnap = null;
+}
+function triggerAfk(){
+  if(!active||afkOpen)return;
+  afkOpen=true;
+  $("afkScrim").classList.add("on");
+  beep(660,0,0.04);beep(495,160,0.04);
+  if(document.hidden) notify("还在专注学习吗？","60 秒内回到页面点「我还在」，否则会自动暂停并保存进度。");
+  updateAfkCd();
+  afkCdTimer=setInterval(updateAfkCd,1000);
+}
+function updateAfkCd(){
+  if(!active){ clearInterval(afkCdTimer); afkCdTimer=null; return; }
+  const left=Math.max(0,Math.ceil((active.afkDueAt+60000-Date.now())/1000));
+  $("afkCd").textContent=left;
+  if(left<=0) afkTimeout();
+}
+function confirmAfk(){
+  $("afkScrim").classList.remove("on");
+  clearInterval(afkCdTimer); afkCdTimer=null;
+  afkOpen=false;
+  closeNotify();
+  if(active){ active.lastTick=Date.now(); scheduleAfk(); beep(620); }
+}
+function afkTimeout(){
+  $("afkScrim").classList.remove("on");
+  clearInterval(afkCdTimer); afkCdTimer=null;
+  afkOpen=false;
+  closeNotify();
+  // 回滚到“该确认”那一刻的快照：死线之后未确认的时间不计入
+  if(active && active.afkSnap){
+    sessXp=active.afkSnap.xp;
+    active.startEpoch=Date.now()-active.afkSnap.elapsed*1000;
+  }
+  if(active){
+    if(document.hidden) notify("已自动暂停 ⏸","超时未确认，本次学习已结算保存。回来可随时开始新的一轮。");
+    toast("⏸ 没检测到你，已自动暂停并保存进度"); endSessionCommit();
+  }
+}
+
+/* ---------- effects ---------- */
+function levelBurst(sk){
+  toast("⬆️ "+sk.emoji+" "+sk.name+" 升到 Lv "+sk.level+"！","gold");
+  beep(740);beep(940,120);beep(1180,240);
+  confetti();
+}
+function confetti(){
+  const wrap=document.createElement("div"); wrap.className="confetti";
+  const cols=["#f5c451","#ff9d4d","#5dd6a0","#5b9dff","#ff6b9d","#fff"];
+  for(let i=0;i<70;i++){
+    const c=document.createElement("div"); c.className="cf";
+    c.style.left=Math.random()*100+"vw";
+    c.style.top="-20px";
+    c.style.background=cols[i%cols.length];
+    c.style.animation="fall "+(1.6+Math.random()*1.6)+"s "+(Math.random()*0.3)+"s ease-in forwards";
+    c.style.transform="translateY(0) rotate("+(Math.random()*360)+"deg)";
+    wrap.appendChild(c);
+  }
+  document.body.appendChild(wrap);
+  setTimeout(()=>wrap.remove(),3600);
+}
+let toastN=0;
+function toast(msg,cls){
+  const t=document.createElement("div"); t.className="toast "+(cls||""); t.textContent=msg;
+  $("toasts").appendChild(t); toastN++;
+  setTimeout(()=>{t.style.transition="opacity .4s";t.style.opacity="0";setTimeout(()=>t.remove(),400);},2600);
+}
+let actx=null;
+
+function beep(freq,delay,vol){
+  if(!S.settings.sound)return;
+  try{
+    actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    const t0=actx.currentTime+(delay||0)/1000;
+    const peak=(vol||0.05);   // 音量：0.03 更轻，0.1 更明显
+    const dur=0.9;            // 余音时长(秒)：越大越像钟，越小越短促
+    const o=actx.createOscillator(),g=actx.createGain();
+    o.type="sine";           // 最柔和的波形(可换 triangle 稍亮一点)
+    o.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(peak,t0+0.04);  // 平滑淡入，去掉"咔哒"
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur); // 柔和淡出
+    o.connect(g);g.connect(actx.destination);
+    o.start(t0);o.stop(t0+dur+0.05);
+  }catch(e){}
+}
+
+function endMelody(){
+  // 欢快的上行大三和弦：C5 → E5 → G5 → C6
+  beep(523,   0, 0.075);
+  beep(659, 150, 0.075);
+  beep(784, 300, 0.080);
+  beep(1047,500, 0.090);
+}
+/* ---------- modals: skill / goal / settings ---------- */
+function showModal(html){$("modalBox").innerHTML=html;$("scrim").classList.add("on");}
+function closeModal(){$("scrim").classList.remove("on");}
+$("scrim").addEventListener("click",e=>{if(e.target.id==="scrim")closeModal();});
+
+let mEmoji,mColor;
+function openSkillEditor(id){
+  const sk=id?S.skills.find(s=>s.id===id):null;
+  mEmoji=sk?sk.emoji:EMOJIS[0]; mColor=sk?sk.color:PALETTE[S.skills.length%PALETTE.length];
+  showModal(
+    '<h3>'+(sk?"编辑技能":"新建技能")+'</h3>'+
+    '<div class="field"><label>名称</label><input id="mName" value="'+(sk?esc(sk.name):"")+'" placeholder="例如：数学 / 钢琴 / 法语"></div>'+
+    '<div class="field"><label>图标</label><div class="emojipick" id="mEmojis"></div></div>'+
+    '<div class="field"><label>颜色</label><div class="swatches" id="mColors"></div></div>'+
+    '<div class="field"><label>或拖动自选任意颜色 <span class="hueprev" id="huePrev"></span></label><input type="range" class="hueslider" id="mHue" min="0" max="359" value="200"></div>'+
+    '<div class="mrow">'+(sk?'<button class="mbtn danger" onclick="deleteSkill(\''+sk.id+'\')">删除</button>':'')+
+    '<button class="mbtn" onclick="closeModal()">取消</button>'+
+    '<button class="mbtn primary" onclick="saveSkill('+(sk?"'"+sk.id+"'":"null")+')">保存</button></div>'
+  );
+  const ep=$("mEmojis");
+  EMOJIS.forEach(e=>{const b=document.createElement("button");b.className="ep"+(e===mEmoji?" sel":"");b.textContent=e;b.onclick=()=>{mEmoji=e;[...ep.children].forEach(c=>c.classList.remove("sel"));b.classList.add("sel");};ep.appendChild(b);});
+  const cp=$("mColors");
+  PALETTE.forEach(c=>{const b=document.createElement("button");b.className="sw"+(c===mColor?" sel":"");b.style.background=c;b.onclick=()=>{mColor=c;[...cp.children].forEach(x=>x.classList.remove("sel"));b.classList.add("sel");$("huePrev").style.background=c;};cp.appendChild(b);});
+  $("huePrev").style.background=mColor;
+  $("mHue").oninput=function(){
+    mColor=hslToHex(parseInt(this.value),70,60);
+    $("huePrev").style.background=mColor;
+    [...cp.children].forEach(x=>x.classList.remove("sel")); // 自选色时取消色板选中
+  };
+}
+function hslToHex(h,s,l){
+  s/=100;l/=100;
+  const k=n=>(n+h/30)%12, a=s*Math.min(l,1-l);
+  const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+  return "#"+[f(0),f(8),f(4)].map(v=>Math.round(v*255).toString(16).padStart(2,"0")).join("");
+}
+function saveSkill(id){
+  const name=$("mName").value.trim(); if(!name){$("mName").focus();return;}
+  if(id){const s=S.skills.find(x=>x.id===id);s.name=name;s.emoji=mEmoji;s.color=mColor;}
+  else{S.skills.push({id:"s"+Date.now(),name,emoji:mEmoji,color:mColor,level:1,xp:0});}
+  closeModal();checkAchievements();save();render();
+}
+function deleteSkill(id){
+  if(active&&active.skillId===id){toast("⚠️ 正在学习这个技能，先结束再删除");return;}
+  S.skills=S.skills.filter(s=>s.id!==id);
+  S.goals=S.goals.filter(g=>g.skillId!==id);
+  if(selSkill===id)selSkill=S.skills[0]?S.skills[0].id:null;
+  closeModal();save();render();
+}
+
+function openGoalEditor(){
+  if(S.skills.length===0){toast("先建一个技能，再给它设目标");return;}
+  showModal(
+    '<h3>新建目标</h3>'+
+    '<div class="field"><label>目标内容</label><input id="gText" placeholder="例如：做完第 3 章习题"></div>'+
+    '<div class="field"><label>归属技能</label><select id="gSkill">'+S.skills.map(s=>'<option value="'+s.id+'">'+s.emoji+" "+esc(s.name)+'</option>').join("")+'</select></div>'+
+    '<div class="field"><label>奖励经验（XP）</label><input id="gBonus" type="number" value="10" min="0" step="5"></div>'+
+    '<div class="mrow"><button class="mbtn" onclick="closeModal()">取消</button><button class="mbtn primary" onclick="saveGoal()">添加</button></div>'
+  );
+}
+function saveGoal(){
+  const text=$("gText").value.trim(); if(!text){$("gText").focus();return;}
+  const skillId=$("gSkill").value;
+  const bonus=Math.max(0,parseInt($("gBonus").value)||10);
+  S.goals.push({id:"g"+Date.now(),skillId,text,bonus,done:false});
+  S.lastGoalAdd=todayStr();
+  closeModal();checkAchievements();save();render();
+}
+
+function openHistory(days){
+  days=days||30;
+  let rows="",mx=1,total=0,activeDays=0;
+  const list=[];
+  for(let i=days-1;i>=0;i--){
+    const d=dayOffset(-i),key=todayStr(d);
+    const mins=Math.round((S.dailyXp[key]||0)/S.settings.xpPerMin);
+    list.push({d,key,mins}); mx=Math.max(mx,mins); total+=mins; if(mins>0)activeDays++;
+  }
+  const wk=["日","一","二","三","四","五","六"];
+  list.forEach(o=>{
+    const isToday=o.key===todayStr(), isSun=o.d.getDay()===0;
+    const h=Math.max(2,(o.mins/mx)*100);
+    rows+='<div class="bar'+(isToday?" today":"")+(isSun?" sun":"")+'" title="'+o.key+' · '+o.mins+'分钟">'+
+      '<div class="col" style="height:'+h+'%"></div>'+
+      (isSun?'<div class="d">'+o.d.getDate()+'</div>':'<div class="d" style="opacity:.35">·</div>')+
+      '</div>';
+  });
+  showModal(
+    '<h3>近 '+days+' 天学习时长</h3>'+
+    '<div style="font-size:13px;color:var(--muted);margin-bottom:10px">合计 <b class="hud" style="color:var(--gold)">'+Math.round(total/60*10)/10+'</b> 小时 · 有学习记录 <b class="hud" style="color:var(--text)">'+activeDays+'</b> 天 · 日均 <b class="hud" style="color:var(--text)">'+(activeDays?Math.round(total/activeDays):0)+'</b> 分钟</div>'+
+    '<div class="chart" style="height:130px;gap:2px;padding:12px 8px 6px">'+rows+'</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:8px">🟠 橙色为周日（标注日期）· 鼠标悬停查看每天数据</div>'+
+    '<div class="mrow">'+
+    '<button class="mbtn" onclick="openHistory('+(days===30?90:30)+')">'+(days===30?"看 90 天":"看 30 天")+'</button>'+
+    '<button class="mbtn primary" onclick="closeModal()">关闭</button></div>'
+  );
+}
+function openSettings(){
+  const st=S.settings;
+  showModal(
+    '<h3>设置</h3>'+
+    '<div class="field"><label>每分钟基础经验（XP / 分钟）</label><input id="setXp" type="number" min="1" value="'+st.xpPerMin+'"></div>'+
+    '<div class="field"><label>每日目标经验（XP）</label><input id="setGoal" type="number" min="0" step="50" value="'+st.dailyGoal+'"></div>'+
+    '<div class="field"><label>专注确认间隔（分钟）— 每隔这么久弹窗确认你还在学</label><input id="setCheck" type="number" min="1" value="'+st.checkEvery+'"></div>'+
+    '<div class="field"><label>提示音</label><select id="setSound"><option value="1"'+(st.sound?" selected":"")+'>开启</option><option value="0"'+(!st.sound?" selected":"")+'>关闭</option></select></div>'+
+  '<div class="field"><label>存档备份（建议定期导出）</label><div class="mrow">'+
+      '<button class="mbtn" onclick="exportSave()">导出备份</button>'+
+      '<button class="mbtn" onclick="this.nextElementSibling.click()">导入备份</button>'+
+      '<input type="file" accept="application/json,.json" style="display:none" onchange="importSave(this)">'+
+    '</div></div>'+
+    '<div class="mrow"><button class="mbtn danger" onclick="resetAll()">清空全部数据</button><button class="mbtn primary" onclick="saveSettings()">保存设置</button></div>'
+  );
+}
+function exportSave(){
+  try{
+    const blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url; a.download="levelup-backup-"+todayStr()+".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    toast("✅ 备份已导出");
+  }catch(e){ toast("导出失败："+e.message); }
+}
+function importSave(input){
+  const f=input.files&&input.files[0]; if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const obj=JSON.parse(r.result);
+      if(!obj||!Array.isArray(obj.skills)) throw new Error("不是有效的存档文件");
+      if(!confirm("导入会覆盖当前全部进度，确定吗？")){ input.value=""; return; }
+      S=obj;
+      const d=defaultState();
+      for(const k in d){ if(S[k]===undefined) S[k]=d[k]; }
+      for(const k in d.settings){ if(S.settings[k]===undefined) S.settings[k]=d.settings[k]; }
+      selSkill=null; save(); closeModal(); render(); checkAchievements();
+      toast("✅ 备份已导入");
+    }catch(e){ toast("导入失败："+e.message); }
+    input.value="";
+  };
+  r.readAsText(f);
+}
+function saveSettings(){
+  S.settings.xpPerMin=Math.max(1,parseInt($("setXp").value)||10);
+  S.settings.dailyGoal=Math.max(0,parseInt($("setGoal").value)||0);
+  S.settings.checkEvery=Math.max(1,parseInt($("setCheck").value)||15);
+  S.settings.sound=$("setSound").value==="1";
+  closeModal();save();render();
+  if(active)scheduleAfk();
+}
+function resetAll(){
+  if(!confirm("确定清空所有技能、经验、目标和记录吗？此操作无法撤销。"))return;
+  S=defaultState(); selSkill=null; closeModal(); save(); render();
+  toast("已重置为初始状态");
+}
+
+/* ---------- boot ---------- */
+load();
+refreshStreakOnLoad();
+if(!persistOK) $("persistNote").style.display="flex";
+render();
+checkAchievements();
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden && active) tick(); }); // 切回页面立即对表结算
+window.addEventListener("beforeunload",e=>{ if(active){ e.preventDefault(); e.returnValue=""; } });
+</script>
+</body>
+</html>

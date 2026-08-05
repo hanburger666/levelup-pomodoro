@@ -167,6 +167,52 @@
   .scrim.on{display:flex}
   .modal{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:22px;width:100%;max-width:400px}
   .modal h3{margin:0 0 16px;font-size:18px}
+  
+
+  /* 技能编辑弹窗单独加宽 */
+.modal.skill-modal{
+  max-width:760px;
+}
+
+/* 默认只显示前 28 个图标 */
+.emojipick.collapsed .ep:nth-child(n+29){
+  display:none;
+}
+
+/* 展开后限制高度，并在图标区域内部滚动 */
+.emojipick.expanded{
+  max-height:300px;
+  overflow-y:auto;
+  padding-right:5px;
+}
+
+/* 展开/收起按钮 */
+.emoji-toggle{
+  margin-top:9px;
+  padding:7px 12px;
+  border-radius:9px;
+  border:1px solid var(--line);
+  background:var(--bg2);
+  color:var(--gold);
+  font-size:13px;
+  font-weight:700;
+}
+
+.emoji-toggle:hover{
+  background:var(--panel2);
+}
+
+/* 手机端 */
+@media (max-width:560px){
+  .modal.skill-modal{
+    max-width:100%;
+  }
+
+  .emojipick.expanded{
+    max-height:42vh;
+  }
+}
+
   .field{margin-bottom:14px}
   .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;letter-spacing:.03em}
   .field input,.field select{width:100%;padding:11px 12px;border-radius:10px;background:var(--bg2);border:1px solid var(--line);color:var(--text);font-size:15px;font-family:inherit}
@@ -865,7 +911,25 @@ function endMelody(){
   beep(1047,500, 0.090);
 }
 /* ---------- modals: skill / goal / settings ---------- */
-function showModal(html){$("modalBox").innerHTML=html;$("scrim").classList.add("on");}
+function showModal(html, extraClass=""){
+  const box=$("modalBox");
+  box.className="modal"+(extraClass ? " "+extraClass : "");
+  box.innerHTML=html;
+  $("scrim").classList.add("on");
+}
+function toggleEmojis(){
+  const box=$("mEmojis");
+  const btn=$("emojiToggle");
+  if(!box || !btn)return;
+
+  const willExpand=box.classList.contains("collapsed");
+
+  box.classList.toggle("collapsed", !willExpand);
+  box.classList.toggle("expanded", willExpand);
+
+  btn.textContent=willExpand ? "收起图标" : "展开全部图标";
+}
+
 function closeModal(){$("scrim").classList.remove("on");}
 $("scrim").addEventListener("click",e=>{if(e.target.id==="scrim")closeModal();});
 
@@ -876,15 +940,23 @@ function openSkillEditor(id){
   showModal(
     '<h3>'+(sk?"编辑技能":"新建技能")+'</h3>'+
     '<div class="field"><label>名称</label><input id="mName" value="'+(sk?esc(sk.name):"")+'" placeholder="例如：数学 / 钢琴 / 法语"></div>'+
-    '<div class="field"><label>图标</label><div class="emojipick" id="mEmojis"></div></div>'+
-    '<div class="field"><label>颜色</label><div class="swatches" id="mColors"></div></div>'+
+'<div class="field">'+
+  '<label>图标</label>'+
+  '<div class="emojipick collapsed" id="mEmojis"></div>'+
+  '<button type="button" class="emoji-toggle" id="emojiToggle" onclick="toggleEmojis()">展开全部图标</button>'+
+'</div>'+    '<div class="field"><label>颜色</label><div class="swatches" id="mColors"></div></div>'+
     '<div class="field"><label>或拖动自选任意颜色 <span class="hueprev" id="huePrev"></span></label><input type="range" class="hueslider" id="mHue" min="0" max="359" value="200"></div>'+
     '<div class="mrow">'+(sk?'<button class="mbtn danger" onclick="deleteSkill(\''+sk.id+'\')">删除</button>':'')+
     '<button class="mbtn" onclick="closeModal()">取消</button>'+
     '<button class="mbtn primary" onclick="saveSkill('+(sk?"'"+sk.id+"'":"null")+')">保存</button></div>'
+  ,'skill-modal'
   );
   const ep=$("mEmojis");
   EMOJIS.forEach(e=>{const b=document.createElement("button");b.className="ep"+(e===mEmoji?" sel":"");b.textContent=e;b.onclick=()=>{mEmoji=e;[...ep.children].forEach(c=>c.classList.remove("sel"));b.classList.add("sel");};ep.appendChild(b);});
+  // 编辑已有技能时，如果当前图标位于折叠区域，自动展开
+if(EMOJIS.indexOf(mEmoji)>=28){
+  toggleEmojis();
+}
   const cp=$("mColors");
   PALETTE.forEach(c=>{const b=document.createElement("button");b.className="sw"+(c===mColor?" sel":"");b.style.background=c;b.onclick=()=>{mColor=c;[...cp.children].forEach(x=>x.classList.remove("sel"));b.classList.add("sel");$("huePrev").style.background=c;};cp.appendChild(b);});
   $("huePrev").style.background=mColor;

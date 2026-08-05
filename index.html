@@ -58,6 +58,11 @@
   border-color:var(--green);
   background:rgba(93,214,160,.08);
 }
+.gear.cloud-error{
+  color:var(--bad);
+  border-color:var(--bad);
+  background:rgba(255,107,107,.08);
+}
   /* ===== hero timer ===== */
   .hero{
     background:linear-gradient(180deg, #20243a 0%, var(--panel) 100%);
@@ -465,20 +470,720 @@ function defaultState(){
   };
 }
 let S;
-function load(){
-  try{const raw=localStorage.getItem(KEY); S = raw?JSON.parse(raw):defaultState();}
-  catch(e){ S=defaultState(); }
-  // backfill
+
+/* 补齐旧版本存档中缺少的字段 */
+function normalizeState(value){
+  let out;
+
+  try{
+    out=(value && typeof value==="object" && !Array.isArray(value))
+      ? JSON.parse(JSON.stringify(value))
+      : defaultState();
+  }catch(e){
+    out=defaultState();
+  }
+
   const d=defaultState();
-  for(const k in d){ if(S[k]===undefined) S[k]=d[k]; }
-  for(const k in d.settings){ if(S.settings[k]===undefined) S.settings[k]=d.settings[k]; }
-  // 旧档迁移：账本功能上线前的每日经验，按"计时学习"补记入账
-  for(const k in S.dailyXp){
-    if(S.dailyTimeXp[k]===undefined && S.dailyGoalXp[k]===undefined) S.dailyTimeXp[k]=S.dailyXp[k];
+
+  for(const k in d){
+    if(out[k]===undefined || out[k]===null){
+      out[k]=d[k];
+    }
+  }
+
+  if(!Array.isArray(out.skills)) out.skills=d.skills;
+  if(!Array.isArray(out.goals)) out.goals=d.goals;
+
+  if(
+    !out.settings ||
+    typeof out.settings!=="object" ||
+    Array.isArray(out.settings)
+  ){
+    out.settings={};
+  }
+
+  for(const k in d.settings){
+    if(out.settings[k]===undefined){
+      out.settings[k]=d.settings[k];
+    }
+  }
+
+  const mapKeys=[
+    "dailyXp",
+    "dailyTimeXp",
+    "dailyGoalXp",
+    "goalDoneDates",
+    "badgeLit",
+    "achievements"
+  ];
+
+  for(const k of mapKeys){
+    if(
+      !out[k] ||
+      typeof out[k]!=="object" ||
+      Array.isArray(out[k])
+    ){
+      out[k]={};
+    }
+  }
+
+  // 旧档迁移
+  for(const k in out.dailyXp){
+    if(
+      out.dailyTimeXp[k]===undefined &&
+      out.dailyGoalXp[k]===undefined
+    ){
+      out.dailyTimeXp[k]=out.dailyXp[k];
+    }
+  }
+
+  return out;
+}
+
+function load(){
+  try{
+    const raw=localStorage.getItem(KEY);
+    S=normalizeState(
+      raw ? JSON.parse(raw) : defaultState()
+    );
+  }catch(e){
+    S=normalizeState(defaultState());
   }
 }
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
 
+/* 只保存到当前设备，不触发云同步 */
+function saveLocalOnly(){
+  try{
+    localStorage.setItem(KEY,JSON.stringify(S));
+  }catch(e){}
+}
+
+/* 原有业务代码继续调用这个函数 */
+function save(){
+  saveLocalOnly();
+  markLocalCloudDirty();
+  scheduleCloudSave();
+
+  // 登录发生在计时期间时，结束计时后再进行首次同步
+  if(cloudInitPending && !active){
+    cloudInitPending=false;
+    setTimeout(()=>{
+      void initializeCloudSync();
+    },0);
+  }
+}
+
+/* ---------- cloud save sync ---------- */
+
+const CLOUD_TABLE="user_saves";
+const CLOUD_SYNC_DELAY=900;
+
+let cloudReady=false;
+let cloudReadyUserId=null;
+let cloudRevision=0;
+
+let cloudSyncTimer=null;
+let cloudSyncBusy=false;
+let cloudSyncQueued=false;
+let cloudInitPending=false;
+
+let cloudStatus="signedout";
+let cloudStatusText="未登录";
+
+let pendingCloudRow=null;
+let suppressCloudSchedule=false;
+
+
+/* 生成稳定的存档摘要，用于比较两份存档是否相同 */
+function stableValue(value){
+  if(Array.isArray(value)){
+    return value.map(stableValue);
+  }
+
+  if(value && typeof value==="object"){
+    const out={};
+
+    Object.keys(value)
+      .sort()
+      .forEach(k=>{
+        out[k]=stableValue(value[k]);
+      });
+
+    return out;
+  }
+
+  return value;
+}
+
+function stateHash(value){
+  const str=JSON.stringify(stableValue(value));
+
+  let hash=2166136261;
+
+  for(let i=0;i<str.length;i++){
+    hash^=str.charCodeAt(i);
+    hash=Math.imul(hash,16777619);
+  }
+
+  return (hash>>>0).toString(16);
+}
+
+
+/* 判断当前设备是不是尚未使用过的默认存档 */
+function isDefaultLocalState(){
+  const current=normalizeState(S);
+  const fresh=normalizeState(defaultState());
+
+  // 徽章检测可能自动写入 false，不作为“使用过”的依据
+  current.badgeLit={};
+  current.achievements={};
+  fresh.badgeLit={};
+  fresh.achievements={};
+
+  return stateHash(current)===stateHash(fresh);
+}
+
+
+/* 每个账号拥有独立的本地同步记录 */
+function cloudMetaKey(userId){
+  return KEY+"_cloud_meta_"+userId;
+}
+
+function readCloudMeta(userId=cloudUser && cloudUser.id){
+  if(!userId)return null;
+
+  try{
+    const raw=localStorage.getItem(cloudMetaKey(userId));
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){
+    return null;
+  }
+}
+
+function writeCloudMeta(
+  meta,
+  userId=cloudUser && cloudUser.id
+){
+  if(!userId)return;
+
+  try{
+    localStorage.setItem(
+      cloudMetaKey(userId),
+      JSON.stringify(meta)
+    );
+  }catch(e){}
+}
+
+
+/* 本地存档产生变化 */
+function markLocalCloudDirty(){
+  if(
+    suppressCloudSchedule ||
+    !cloudUser
+  ){
+    return;
+  }
+
+  const meta=readCloudMeta() || {};
+
+  writeCloudMeta({
+    ...meta,
+    userId:cloudUser.id,
+    revision:Number(meta.revision || cloudRevision || 0),
+    localHash:stateHash(S),
+    dirty:true
+  });
+}
+
+
+/* 更新云朵按钮状态 */
+function setCloudStatus(status,text){
+  cloudStatus=status;
+  cloudStatusText=text;
+  updateCloudButton();
+}
+
+
+/* 记录最后一次成功同步的版本 */
+function rememberCloudSync(
+  revision,
+  lastSyncedHash,
+  dirty=false
+){
+  cloudRevision=Number(revision || 0);
+  cloudReady=true;
+  cloudReadyUserId=cloudUser ? cloudUser.id : null;
+
+  writeCloudMeta({
+    userId:cloudReadyUserId,
+    revision:cloudRevision,
+    lastSyncedHash:lastSyncedHash,
+    localHash:stateHash(S),
+    dirty:dirty,
+    syncedAt:new Date().toISOString()
+  });
+}
+
+
+/* 读取当前账号的云端存档 */
+async function fetchCloudRow(
+  userId=cloudUser && cloudUser.id
+){
+  if(!userId)return null;
+
+  const {data,error}=await supabaseClient
+    .from(CLOUD_TABLE)
+    .select("state,revision,updated_at")
+    .eq("user_id",userId)
+    .maybeSingle();
+
+  if(error)throw error;
+
+  return data;
+}
+
+
+/* 防抖上传，连续操作只触发一次网络请求 */
+function scheduleCloudSave(){
+  if(
+    suppressCloudSchedule ||
+    !cloudUser ||
+    !cloudReady ||
+    cloudReadyUserId!==cloudUser.id
+  ){
+    return;
+  }
+
+  clearTimeout(cloudSyncTimer);
+
+  cloudSyncTimer=setTimeout(()=>{
+    void pushCloudSave(false);
+  },CLOUD_SYNC_DELAY);
+}
+
+
+/* 将当前设备存档上传到云端 */
+async function pushCloudSave(force=false){
+  if(
+    !cloudUser ||
+    !cloudReady ||
+    cloudReadyUserId!==cloudUser.id
+  ){
+    return;
+  }
+
+  if(cloudSyncBusy){
+    cloudSyncQueued=true;
+    return;
+  }
+
+  const userId=cloudUser.id;
+  const snapshot=normalizeState(S);
+  const snapshotHash=stateHash(snapshot);
+  const meta=readCloudMeta(userId);
+
+  if(
+    !force &&
+    meta &&
+    !meta.dirty &&
+    meta.lastSyncedHash===snapshotHash
+  ){
+    setCloudStatus("synced","云端已同步");
+    return;
+  }
+
+  cloudSyncBusy=true;
+  setCloudStatus("syncing","正在同步云端存档……");
+
+  try{
+    let row;
+
+    /* 云端还没有存档：创建第一行 */
+    if(cloudRevision===0){
+      const {data,error}=await supabaseClient
+        .from(CLOUD_TABLE)
+        .insert({
+          user_id:userId,
+          state:snapshot,
+          revision:1,
+          updated_at:new Date().toISOString()
+        })
+        .select("revision,updated_at")
+        .single();
+
+      if(error)throw error;
+      row=data;
+    }else{
+      /*
+       * 乐观锁：
+       * 只有云端 revision 仍等于本机记录时才允许更新。
+       */
+      const nextRevision=cloudRevision+1;
+
+      const {data,error}=await supabaseClient
+        .from(CLOUD_TABLE)
+        .update({
+          state:snapshot,
+          revision:nextRevision,
+          updated_at:new Date().toISOString()
+        })
+        .eq("user_id",userId)
+        .eq("revision",cloudRevision)
+        .select("revision,updated_at")
+        .maybeSingle();
+
+      if(error)throw error;
+
+      /*
+       * 没有更新到数据：
+       * 说明另一台设备已经生成了新版本。
+       */
+      if(!data){
+        const latest=await fetchCloudRow(userId);
+
+        if(latest){
+          showCloudConflict(latest);
+          return;
+        }
+
+        cloudRevision=0;
+        cloudSyncQueued=true;
+        return;
+      }
+
+      row=data;
+    }
+
+    if(
+      !cloudUser ||
+      cloudUser.id!==userId
+    ){
+      return;
+    }
+
+    rememberCloudSync(
+      row.revision,
+      snapshotHash,
+      false
+    );
+
+    setCloudStatus("synced","云端已同步");
+  }catch(error){
+    console.error("Cloud save error:",error);
+
+    /*
+     * 23505 表示创建时该账号的存档已经存在，
+     * 通常是另一台设备同时完成了首次上传。
+     */
+    if(error && error.code==="23505"){
+      try{
+        const latest=await fetchCloudRow(userId);
+
+        if(latest){
+          showCloudConflict(latest);
+          return;
+        }
+      }catch(fetchError){
+        console.error(
+          "Cloud conflict fetch error:",
+          fetchError
+        );
+      }
+    }
+
+    setCloudStatus(
+      "error",
+      "同步失败，本地存档仍然安全"
+    );
+
+    toast("☁️ 云端同步失败，本地记录已保留");
+  }finally{
+    cloudSyncBusy=false;
+
+    if(cloudSyncQueued){
+      cloudSyncQueued=false;
+
+      setTimeout(()=>{
+        void pushCloudSave(false);
+      },0);
+    }
+  }
+}
+
+
+/* 用云端存档替换当前设备存档 */
+function applyCloudRow(row,announce=true){
+  const incoming=normalizeState(row.state);
+  const originalCloudHash=stateHash(incoming);
+
+  suppressCloudSchedule=true;
+
+  S=incoming;
+  refreshStreakOnLoad();
+
+  if(!S.skills.some(s=>s.id===selSkill)){
+    selSkill=S.skills[0] ? S.skills[0].id : null;
+  }
+
+  saveLocalOnly();
+
+  suppressCloudSchedule=false;
+
+  const localHash=stateHash(S);
+
+  rememberCloudSync(
+    row.revision,
+    originalCloudHash,
+    localHash!==originalCloudHash
+  );
+
+  render();
+  setCloudStatus("synced","已载入云端存档");
+
+  if(announce){
+    toast("☁️ 已载入云端存档","gold");
+  }
+
+  /*
+   * refreshStreakOnLoad() 可能修正过期连续天数，
+   * 修正后再回传一次云端。
+   */
+  if(localHash!==originalCloudHash){
+    scheduleCloudSave();
+  }
+}
+
+
+/* 两台设备同时修改时，让用户选择 */
+function showCloudConflict(row){
+  pendingCloudRow=row;
+  cloudReady=false;
+
+  setCloudStatus(
+    "conflict",
+    "发现两份不同的存档，需要选择"
+  );
+
+  const when=row.updated_at
+    ? new Date(row.updated_at).toLocaleString()
+    : "未知时间";
+
+  showModal(
+    '<h3>发现两份不同的存档</h3>'+
+    '<div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:14px">'+
+      '当前设备和云端都有不同进度。云端最后更新时间：'+
+      '<b style="color:var(--text)">'+esc(when)+'</b>。'+
+      '<br>请选择要保留哪一份。被选择的存档会成为新的云端版本。'+
+    '</div>'+
+    '<div class="mrow">'+
+      '<button class="mbtn" onclick="chooseCloudCopy()">使用云端存档</button>'+
+      '<button class="mbtn primary" onclick="chooseLocalCopy()">使用当前设备</button>'+
+    '</div>'
+  );
+}
+
+function chooseCloudCopy(){
+  if(!pendingCloudRow)return;
+
+  const row=pendingCloudRow;
+  pendingCloudRow=null;
+
+  closeModal();
+  applyCloudRow(row,true);
+}
+
+async function chooseLocalCopy(){
+  if(
+    !pendingCloudRow ||
+    !cloudUser
+  ){
+    return;
+  }
+
+  const row=pendingCloudRow;
+  pendingCloudRow=null;
+
+  closeModal();
+
+  cloudRevision=Number(row.revision || 0);
+  cloudReady=true;
+  cloudReadyUserId=cloudUser.id;
+
+  writeCloudMeta({
+    userId:cloudUser.id,
+    revision:cloudRevision,
+    lastSyncedHash:stateHash(
+      normalizeState(row.state)
+    ),
+    localHash:stateHash(S),
+    dirty:true
+  });
+
+  await pushCloudSave(true);
+
+  if(cloudStatus==="synced"){
+    toast("☁️ 当前设备存档已上传","gold");
+  }
+}
+
+
+/* 登录后判断首次上传、云端下载或冲突 */
+async function initializeCloudSync(){
+  if(!cloudUser)return;
+
+  /*
+   * 不在计时进行中替换 S，
+   * 避免正在进行的会话被另一份存档打断。
+   */
+  if(active){
+    cloudInitPending=true;
+
+    setCloudStatus(
+      "waiting",
+      "结束当前计时后开始同步"
+    );
+
+    return;
+  }
+
+  const userId=cloudUser.id;
+
+  cloudReady=false;
+  cloudReadyUserId=null;
+
+  setCloudStatus(
+    "loading",
+    "正在检查云端存档……"
+  );
+
+  try{
+    const row=await fetchCloudRow(userId);
+
+    if(
+      !cloudUser ||
+      cloudUser.id!==userId
+    ){
+      return;
+    }
+
+    /*
+     * 第一次使用：
+     * 云端没有存档，上传当前设备的 localStorage。
+     */
+    if(!row){
+      cloudRevision=0;
+      cloudReady=true;
+      cloudReadyUserId=userId;
+
+      writeCloudMeta({
+        userId:userId,
+        revision:0,
+        lastSyncedHash:null,
+        localHash:stateHash(S),
+        dirty:true
+      },userId);
+
+      await pushCloudSave(true);
+
+      if(cloudStatus==="synced"){
+        toast("☁️ 本地存档已首次上传","gold");
+      }
+
+      return;
+    }
+
+    const cloudState=normalizeState(row.state);
+    const cloudHash=stateHash(cloudState);
+    const localHash=stateHash(S);
+    const meta=readCloudMeta(userId);
+
+    cloudRevision=Number(row.revision || 0);
+    cloudReady=true;
+    cloudReadyUserId=userId;
+
+    /* 两边完全相同 */
+    if(localHash===cloudHash){
+      rememberCloudSync(
+        cloudRevision,
+        cloudHash,
+        false
+      );
+
+      setCloudStatus("synced","云端已同步");
+      return;
+    }
+
+    /*
+     * 新浏览器、新设备的默认数据：
+     * 自动下载云端，不弹冲突提示。
+     */
+    if(isDefaultLocalState()){
+      applyCloudRow(row,true);
+      return;
+    }
+
+    /*
+     * 当前设备从上次同步后没有变化，
+     * 说明只有云端产生了新版本。
+     */
+    if(
+      meta &&
+      meta.lastSyncedHash===localHash
+    ){
+      applyCloudRow(row,true);
+      return;
+    }
+
+    /*
+     * 云端仍是当前设备上次见过的版本，
+     * 说明只有本地产生了离线修改。
+     */
+    if(
+      meta &&
+      Number(meta.revision)===cloudRevision &&
+      meta.lastSyncedHash===cloudHash
+    ){
+      writeCloudMeta({
+        ...meta,
+        localHash:localHash,
+        dirty:true
+      },userId);
+
+      await pushCloudSave(true);
+      return;
+    }
+
+    /*
+     * 本地和云端都发生过变化。
+     */
+    showCloudConflict(row);
+  }catch(error){
+    console.error(
+      "Cloud initialization error:",
+      error
+    );
+
+    setCloudStatus(
+      "error",
+      "无法连接云端，本地模式仍可使用"
+    );
+
+    toast(
+      "☁️ 暂时无法连接云端，已继续使用本地存档"
+    );
+  }
+}
+
+
+/* 账号弹窗中的“立即同步”按钮 */
+function syncCloudNow(){
+  if(!cloudUser){
+    openAccount();
+    return;
+  }
+
+  void initializeCloudSync();
+}
 /* ---------- leveling math ---------- */
 function xpToNext(level){ return level>=10 ? 300 : 100+20*level; }            // xp needed to go from `level` -> level+1
 function addXpToSkill(skill, amount){
@@ -946,37 +1651,76 @@ function updateCloudButton(){
   const btn=$("cloudBtn");
   if(!btn)return;
 
-  if(cloudUser){
-    btn.classList.add("connected");
-    btn.textContent="☁✓";
-    btn.title="已登录："+(cloudUser.email||"云端账号");
-  }else{
-    btn.classList.remove("connected");
+  btn.classList.remove(
+    "connected",
+    "cloud-error"
+  );
+
+  if(!cloudUser){
     btn.textContent="☁️";
     btn.title="登录云端账号";
+    return;
+  }
+
+  const icons={
+    loading:"☁…",
+    waiting:"☁…",
+    syncing:"☁↻",
+    synced:"☁✓",
+    error:"☁!",
+    conflict:"☁?"
+  };
+
+  btn.textContent=icons[cloudStatus] || "☁✓";
+  btn.title=
+    (cloudUser.email || "云端账号")+
+    " · "+
+    cloudStatusText;
+
+  if(
+    cloudStatus==="error" ||
+    cloudStatus==="conflict"
+  ){
+    btn.classList.add("cloud-error");
+  }else{
+    btn.classList.add("connected");
   }
 }
 
 function openAccount(){
-  if(cloudUser){
-    showModal(
-      '<h3>云端账号</h3>'+
-      '<div class="field">'+
-        '<label>当前登录账号</label>'+
-        '<div style="padding:11px 12px;border-radius:10px;background:var(--bg2);border:1px solid var(--line);word-break:break-all">'+
-          esc(cloudUser.email||"已登录用户")+
-        '</div>'+
+ if(cloudUser){
+  showModal(
+    '<h3>云端账号</h3>'+
+    '<div class="field">'+
+      '<label>当前登录账号</label>'+
+      '<div style="padding:11px 12px;border-radius:10px;background:var(--bg2);border:1px solid var(--line);word-break:break-all">'+
+        esc(cloudUser.email || "已登录用户")+
       '</div>'+
-      '<div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px">'+
-        '账号连接成功。下一阶段将启用本地存档与云端存档同步。'+
+    '</div>'+
+
+    '<div class="field">'+
+      '<label>存档状态</label>'+
+      '<div style="padding:11px 12px;border-radius:10px;background:var(--bg2);border:1px solid var(--line)">'+
+        esc(cloudStatusText)+
       '</div>'+
-      '<div class="mrow">'+
-        '<button class="mbtn" onclick="closeModal()">关闭</button>'+
-        '<button class="mbtn danger" onclick="signOutCloud()">退出登录</button>'+
-      '</div>'
-    );
-    return;
-  }
+    '</div>'+
+
+    '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">'+
+      '修改技能、目标、设置或结束计时后，会先保存到当前设备，再自动同步到云端。'+
+    '</div>'+
+
+    '<div class="mrow">'+
+      '<button class="mbtn" onclick="syncCloudNow()">立即同步</button>'+
+      '<button class="mbtn" onclick="closeModal()">关闭</button>'+
+    '</div>'+
+
+    '<div class="mrow">'+
+      '<button class="mbtn danger" onclick="signOutCloud()">退出登录</button>'+
+    '</div>'
+  );
+
+  return;
+}
 
   showModal(
     '<h3>登录云端账号</h3>'+
@@ -1096,15 +1840,52 @@ async function signOutCloud(){
 
 function initCloudAuth(){
   supabaseClient.auth.onAuthStateChange((event,session)=>{
-    cloudUser=session && session.user ? session.user : null;
-    updateCloudButton();
+    const previousUserId=cloudUser
+      ? cloudUser.id
+      : null;
 
-    if(event==="SIGNED_IN"){
-      console.log("Supabase signed in:",cloudUser && cloudUser.email);
+    cloudUser=
+      session && session.user
+        ? session.user
+        : null;
+
+    if(!cloudUser){
+      clearTimeout(cloudSyncTimer);
+
+      cloudReady=false;
+      cloudReadyUserId=null;
+      cloudRevision=0;
+      cloudSyncBusy=false;
+      cloudSyncQueued=false;
+      pendingCloudRow=null;
+
+      setCloudStatus(
+        "signedout",
+        "未登录"
+      );
+
+      return;
     }
 
-    if(event==="SIGNED_OUT"){
-      console.log("Supabase signed out");
+    updateCloudButton();
+
+    /*
+     * 回调本身不使用 async，
+     * 将数据库读取安排到当前回调结束之后。
+     */
+    if(
+      (
+        event==="INITIAL_SESSION" ||
+        event==="SIGNED_IN"
+      ) &&
+      (
+        previousUserId!==cloudUser.id ||
+        cloudReadyUserId!==cloudUser.id
+      )
+    ){
+      setTimeout(()=>{
+        void initializeCloudSync();
+      },0);
     }
   });
 }
@@ -1300,6 +2081,12 @@ render();
 checkAchievements();
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden && active) tick(); }); // 切回页面立即对表结算
 window.addEventListener("beforeunload",e=>{ if(active){ e.preventDefault(); e.returnValue=""; } });
+
+window.addEventListener("online",()=>{
+  if(cloudUser){
+    void initializeCloudSync();
+  }
+});
 </script>
 </body>
 </html>
